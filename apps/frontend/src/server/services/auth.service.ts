@@ -294,11 +294,12 @@ export async function registerUser(input: {
     })
   ]);
 
-  const canReuseExistingEmail =
-    Boolean(existingByEmail) &&
-    existingByEmail.role === "USER" &&
-    !existingByEmail.emailVerifiedAt &&
-    !existingByEmail.googleId;
+  const canReuseExistingEmail = Boolean(
+    existingByEmail &&
+      existingByEmail.role === "USER" &&
+      !existingByEmail.emailVerifiedAt &&
+      !existingByEmail.googleId
+  );
   const hasEmailConflict = Boolean(existingByEmail && !canReuseExistingEmail);
   const hasUsernameConflict = Boolean(
     existingByUsername && (!canReuseExistingEmail || existingByUsername.id !== existingByEmail?.id)

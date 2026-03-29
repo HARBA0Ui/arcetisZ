@@ -1,0 +1,388 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum QuestCategory {
+  DAILY
+  SOCIAL
+  SPONSORED
+}
+
+enum GiveawayStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum GiveawayEntryStatus {
+  pending
+  selected
+  rejected
+}
+
+enum SponsorRequestCategory {
+  SOCIAL_MEDIA
+  CONTENT_CREATOR
+  COMMUNITY
+  PRODUCT_PROMOTION
+  EVENT_CAMPAIGN
+}
+
+enum SponsorRequestStatus {
+  pending
+  accepted
+  rejected
+}
+
+enum RedemptionStatus {
+  pending
+  approved
+  rejected
+  expired
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum QuestSubmissionStatus {
+  pending
+  approved
+  rejected
+}
+
+enum NotificationType {
+  QUEST_SUBMISSION_REVIEWED
+  REDEMPTION_REVIEWED
+  ADMIN_REVIEW_REQUIRED
+  ADMIN_REDEMPTION_REQUIRED
+  ADMIN_SPONSOR_REQUEST_REQUIRED
+  SPONSOR_REQUEST_REVIEWED
+  SPONSOR_REQUEST_LIMIT_REACHED
+  SYSTEM
+}
+
+model User {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  email             String              @unique
+  username          String              @unique
+  password          String
+  emailVerifiedAt   DateTime?
+  emailVerificationCodeHash String?
+  emailVerificationCodeExpiresAt DateTime?
+  emailVerificationSentAt DateTime?
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  passwordResetRequestedAt DateTime?
+  googleId          String?
+  role              UserRole            @default(USER)
+  points            Int                 @default(0)
+  xp                Int                 @default(0)
+  level             Int                 @default(1)
+  loginStreak       Int                 @default(0)
+  lastLogin         DateTime?
+  lastSpinAt        DateTime?
+  spinCountToday    Int                 @default(0)
+  referralCode      String              @unique
+  referredById      String?             @db.ObjectId
+  referredBy        User?               @relation("UserReferrals", fields: [referredById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  referrals         User[]              @relation("UserReferrals")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  pointsTransactions PointsTransaction[]
+  xpTransactions    XPTransaction[]
+  questCompletions  QuestCompletion[]
+  questSubmissions  QuestSubmission[]
+  sponsorRequests   SponsorRequest[]    @relation("SubmittedSponsorRequests")
+  reviewedSponsorRequests SponsorRequest[] @relation("ReviewedSponsorRequests")
+  reviewedQuestSubmissions QuestSubmission[] @relation("ReviewedQuestSubmissions")
+  redemptions       Redemption[]
+  reviewedRedemptions Redemption[]      @relation("ReviewedRedemptions")
+  notifications     Notification[]
+  giveawayEntries   GiveawayEntry[]
+  reviewedGiveawayEntries GiveawayEntry[] @relation("ReviewedGiveawayEntries")
+  sentReferrals     Referral[]          @relation("SentReferrals")
+  receivedReferrals Referral[]          @relation("ReceivedReferrals")
+  twoFactorEnabled  Boolean             @default(false)
+  twoFactorSecret   String?
+  twoFactorRecoveryCodes Json?
+
+  @@index([referredById])
+}
+
+model PointsTransaction {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amount    Int
+  source    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model XPTransaction {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amount    Int
+  source    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Quest {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  title          String
+  description    String
+  imageUrl       String?
+  category       QuestCategory
+  platform       String?
+  link           String?
+  requiresProof  Boolean          @default(false)
+  proofInstructions String?
+  xpReward       Int
+  pointsReward   Int
+  maxCompletions Int              @default(1)
+  completions    Int              @default(0)
+  minLevel       Int              @default(1)
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  questCompletions QuestCompletion[]
+  submissions    QuestSubmission[]
+  sponsorRequest SponsorRequest?
+}
+
+model QuestCompletion {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  questId   String   @db.ObjectId
+  userId    String   @db.ObjectId
+  quest     Quest    @relation(fields: [questId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt DateTime @default(now())
+
+  @@index([questId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model QuestSubmission {
+  id                String               @id @default(auto()) @map("_id") @db.ObjectId
+  questId           String               @db.ObjectId
+  userId            String               @db.ObjectId
+  reviewedById      String?              @db.ObjectId
+  status            QuestSubmissionStatus @default(pending)
+  proofUrl          String?
+  proofSecondaryUrl String?
+  proofText         String?
+  reviewNote        String?
+  externalReference String?
+  createdAt         DateTime             @default(now())
+  reviewedAt        DateTime?
+  quest             Quest                @relation(fields: [questId], references: [id])
+  user              User                 @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewedBy        User?                @relation("ReviewedQuestSubmissions", fields: [reviewedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([questId])
+  @@index([userId])
+  @@index([reviewedById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SponsorRequest {
+  id                String                @id @default(auto()) @map("_id") @db.ObjectId
+  submittedById     String                @db.ObjectId
+  reviewedById      String?               @db.ObjectId
+  publishedQuestId  String?               @unique @db.ObjectId
+  companyName       String
+  contactName       String
+  contactEmail      String
+  category          SponsorRequestCategory
+  title             String
+  description       String
+  imageUrl          String?
+  otherReason       String?
+  platform          String?
+  landingUrl        String?
+  proofRequirements String?
+  requestedXpReward Int
+  requestedPointsReward Int
+  maxCompletions    Int                   @default(1)
+  minLevel          Int                   @default(1)
+  status            SponsorRequestStatus  @default(pending)
+  reviewNote        String?
+  createdAt         DateTime              @default(now())
+  reviewedAt        DateTime?
+  submittedBy       User                  @relation("SubmittedSponsorRequests", fields: [submittedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewedBy        User?                 @relation("ReviewedSponsorRequests", fields: [reviewedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  publishedQuest    Quest?                @relation(fields: [publishedQuestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([submittedById])
+  @@index([reviewedById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Reward {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  description   String
+  imageUrl      String?
+  pointsCost    Int
+  tndPrice      Float?
+  plans         Json?
+  deliveryFields Json?
+  minLevel      Int
+  minAccountAge Int          @default(0)
+  stock         Int
+  createdAt     DateTime     @default(now())
+  redemptions   Redemption[]
+}
+
+model Giveaway {
+  id                    String         @id @default(auto()) @map("_id") @db.ObjectId
+  title                 String
+  description           String
+  prizeSummary          String?
+  imageUrl              String?
+  status                GiveawayStatus @default(ACTIVE)
+  promoted              Boolean?
+  winnerCount           Int?
+  minLevel              Int?
+  minAccountAge         Int?
+  allowEntryEdits       Boolean?
+  inputFields           Json?
+  requiresJustification Boolean        @default(false)
+  justificationLabel    String?
+  endsAt                DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  entries               GiveawayEntry[]
+
+  @@index([status])
+  @@index([endsAt])
+  @@index([createdAt])
+}
+
+model GiveawayEntry {
+  id            String              @id @default(auto()) @map("_id") @db.ObjectId
+  giveawayId    String              @db.ObjectId
+  userId        String              @db.ObjectId
+  reviewedById  String?             @db.ObjectId
+  status        GiveawayEntryStatus @default(pending)
+  answers       Json?
+  justification String?
+  justificationImageUrls Json?
+  createdAt     DateTime            @default(now())
+  reviewedAt    DateTime?
+  giveaway      Giveaway            @relation(fields: [giveawayId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user          User                @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewedBy    User?               @relation("ReviewedGiveawayEntries", fields: [reviewedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([giveawayId, userId])
+  @@index([giveawayId])
+  @@index([userId])
+  @@index([reviewedById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Redemption {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  rewardId  String           @db.ObjectId
+  reviewedById String?       @db.ObjectId
+  user      User             @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reward    Reward           @relation(fields: [rewardId], references: [id])
+  reviewedBy User?           @relation("ReviewedRedemptions", fields: [reviewedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status    RedemptionStatus @default(pending)
+  requestCode String?
+  planId    String?
+  planLabel String?
+  pointsSpent Int?
+  requestedInfo Json?
+  secureRequestedInfo Json?
+  reviewNote String?
+  createdAt DateTime         @default(now())
+  expiresAt DateTime?
+  processedAt DateTime?
+  sensitiveInfoPurgedAt DateTime?
+
+  @@index([userId])
+  @@index([rewardId])
+  @@index([reviewedById])
+  @@index([status])
+  @@index([requestCode])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+model Referral {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  referrerId     String   @db.ObjectId
+  referredUserId String   @db.ObjectId
+  rewarded       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  referrer       User     @relation("SentReferrals", fields: [referrerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  referredUser   User     @relation("ReceivedReferrals", fields: [referredUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([referredUserId])
+  @@index([referrerId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  user      User             @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([readAt])
+}
+
+model PlatformConfig {
+  id                      String   @id @default(auto()) @map("_id") @db.ObjectId
+  maxXpPerDay             Int      @default(200)
+  maxPointsPerDay         Int      @default(300)
+  maxSocialTasksPerDay    Int      @default(2)
+  redemptionCooldownHours Int      @default(48)
+  maxReferralsPerDay      Int      @default(10)
+  referralRewardLevel     Int      @default(2)
+  referralPointsReward    Int      @default(200)
+  referralXpReward        Int      @default(100)
+  maxSponsorRequestsPerUser Int    @default(3)
+  sponsorRequestWindowDays Int     @default(30)
+  redemptionRequestExpiryHours Int @default(12)
+  spinCooldownHours       Int      @default(24)
+  spinMinLevel            Int      @default(2)
+  spinItems               Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model AuthThrottle {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  key             String   @unique
+  attempts        Int      @default(0)
+  windowStartedAt DateTime @default(now())
+  lastAttemptAt   DateTime @default(now())
+  blockedUntil    DateTime?
+}
+
