@@ -378,7 +378,12 @@ async function handleGet(request: NextRequest, path: string[]) {
   if (path[0] === "admin" && path[1] === "redemptions" && path.length === 2) {
     await requireAdmin(request);
     const query = parseQuery(request, adminRedemptionsQuerySchema);
-    const redemptions = await listRedemptions(query);
+    const redemptions = await listRedemptions({
+      q: typeof query.q === "string" ? query.q : undefined,
+      page: Number(query.page),
+      pageSize: Number(query.pageSize),
+      status: query.status
+    });
     return NextResponse.json({ redemptions });
   }
 
