@@ -1,0 +1,7 @@
+﻿<svg width="320" height="80" viewBox="0 0 320 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="320" height="80" rx="10" fill="#000000"/>
+  <circle cx="40" cy="40" r="27" stroke="#F3F4F6" stroke-width="4"/>
+  <path d="M29 56L40 24L51 56" stroke="#F3F4F6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M33 47H47" stroke="#F3F4F6" stroke-width="4" stroke-linecap="round"/>
+  <text x="82" y="52" fill="#F3F4F6" font-size="36" font-family="Poppins, Arial, sans-serif" font-weight="600" letter-spacing="2">ARCETIS</text>
+</svg>

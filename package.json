@@ -1,0 +1,23 @@
+{
+  "name": "arcetis",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/frontend"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.cjs",
+    "build": "npm run build --workspace=frontend",
+    "test": "npm run test --workspace=frontend",
+    "test:coverage": "npm run test:coverage --workspace=frontend",
+    "start": "npm run start --workspace=frontend",
+    "prisma:generate": "npm run prisma:generate --workspace=frontend",
+    "prisma:migrate": "npm run prisma:migrate --workspace=frontend",
+    "prisma:seed": "npm run prisma:seed --workspace=frontend",
+    "dev:turbo": "npm run dev:turbo --workspace=frontend",
+    "dev:workspace": "npm run dev --workspace=frontend"
+  },
+  "devDependencies": {
+    "@prisma/client": "^6.12.0"
+  }
+}

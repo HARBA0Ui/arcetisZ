@@ -1,0 +1,345 @@
+@import "@mertercelik/react-prize-wheel/style.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 97%;
+  --foreground: 222 18% 10%;
+  --muted: 220 14% 92%;
+  --muted-foreground: 222 8% 38%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 18% 10%;
+  --border: 220 12% 84%;
+  --input: 220 12% 84%;
+  --primary: 0 0% 8%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 220 16% 90%;
+  --secondary-foreground: 222 20% 12%;
+  --accent: 220 16% 90%;
+  --accent-foreground: 222 20% 12%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --arcetis-ember: 24 100% 56%;
+  --arcetis-ember-soft: 28 100% 96%;
+  --radius: 0.8rem;
+}
+
+.dark {
+  --background: 0 0% 3%;
+  --foreground: 0 0% 96%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 0 0% 64%;
+  --card: 0 0% 5%;
+  --card-foreground: 0 0% 96%;
+  --border: 0 0% 16%;
+  --input: 0 0% 17%;
+  --primary: 0 0% 96%;
+  --primary-foreground: 0 0% 6%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 0 0% 96%;
+  --accent: 0 0% 11%;
+  --accent-foreground: 0 0% 96%;
+  --destructive: 0 62% 40%;
+  --destructive-foreground: 0 0% 96%;
+  --arcetis-ember: 24 100% 58%;
+  --arcetis-ember-soft: 24 24% 10%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased font-sans;
+  background-image:
+    radial-gradient(circle at 86% 12%, rgba(255, 122, 24, 0.09), transparent 19%),
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.08), transparent 24%),
+    radial-gradient(circle at 100% 10%, rgba(255, 255, 255, 0.07), transparent 24%),
+    linear-gradient(to bottom right, rgba(255, 255, 255, 0.02), transparent 30%);
+  min-height: 100vh;
+  overflow-y: scroll;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(circle at 84% 10%, rgba(255, 122, 24, 0.14), transparent 21%),
+    radial-gradient(circle at 10% -5%, rgba(255, 255, 255, 0.18), transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.1), transparent 25%),
+    linear-gradient(170deg, rgba(255, 255, 255, 0.03), transparent 35%);
+}
+
+@keyframes arcetis-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes arcetis-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes arcetis-spinner-breathe {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes arcetis-navigation-progress {
+  0% {
+    transform: translateX(-68%) scaleX(0.34);
+  }
+  55% {
+    transform: translateX(8%) scaleX(0.72);
+  }
+  100% {
+    transform: translateX(118%) scaleX(0.4);
+  }
+}
+
+@keyframes arcetis-skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.arcetis-dropdown {
+  animation: arcetis-pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top right;
+}
+
+.arcetis-spinner {
+  animation: arcetis-spinner-breathe 1200ms ease-in-out infinite;
+}
+
+.arcetis-spinner-ring {
+  animation: arcetis-spinner-rotate 780ms cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+  will-change: transform;
+}
+
+.arcetis-navigation-bar {
+  animation: arcetis-navigation-progress 1100ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.arcetis-skeleton {
+  position: relative;
+  overflow: hidden;
+}
+
+.arcetis-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.34) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: arcetis-skeleton-shimmer 1500ms ease-in-out infinite;
+}
+
+.dark .arcetis-skeleton::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arcetis-dropdown,
+  .arcetis-navigation-bar,
+  .arcetis-spinner,
+  .arcetis-spinner-ring,
+  .arcetis-skeleton::after {
+    animation: none;
+  }
+}
+
+@keyframes arcetis-logo-fade {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.975);
+    filter: saturate(0.88);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+    filter: saturate(1);
+  }
+}
+
+@keyframes arcetis-sweep {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(190%);
+    opacity: 0;
+  }
+}
+
+.arcetis-loader-shell {
+  min-width: min(560px, calc(100vw - 2rem));
+}
+
+.arcetis-wheel {
+  contain: layout;
+  overflow: visible;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.arcetis-prize-wheel .prize-wheel-container {
+  width: 100%;
+}
+
+.arcetis-prize-wheel .prize-wheel-svg {
+  overflow: visible;
+  filter: drop-shadow(0 24px 38px rgba(0, 0, 0, 0.22));
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    filter 180ms ease;
+}
+
+.dark .arcetis-prize-wheel .prize-wheel-svg {
+  filter: drop-shadow(0 30px 50px rgba(0, 0, 0, 0.44));
+}
+
+.arcetis-prize-wheel[data-phase="requesting"] .prize-wheel-svg {
+  opacity: 0.9;
+  transform: scale(0.985);
+}
+
+.arcetis-prize-wheel .prize-wheel-container .winIndicator {
+  transition: filter 180ms ease;
+}
+
+.arcetis-prize-wheel[data-phase="spinning"] .prize-wheel-container .winIndicator {
+  filter: drop-shadow(0 0 16px rgba(255, 160, 79, 0.32));
+}
+
+.arcetis-loader-logo {
+  animation: arcetis-logo-fade 1300ms ease-in-out infinite;
+}
+
+.arcetis-loader-sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.24) 50%, transparent 62%);
+  animation: arcetis-sweep 1800ms ease-in-out infinite;
+}
+
+.dark .arcetis-loader-sweep {
+  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.12) 50%, transparent 60%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arcetis-loader-logo,
+  .arcetis-loader-sweep {
+    animation: none;
+  }
+}
+
+@keyframes arcetis-landing-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -14px, 0) scale(1.04);
+  }
+}
+
+@keyframes arcetis-levelup-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes arcetis-levelup-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes arcetis-levelup-scan {
+  0% {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(240%);
+    opacity: 0;
+  }
+}
+
+.arcetis-levelup-backdrop {
+  animation: arcetis-levelup-fade 180ms ease-out;
+}
+
+.arcetis-levelup-panel {
+  animation: arcetis-levelup-rise 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.arcetis-levelup-scan {
+  animation: arcetis-levelup-scan 1900ms cubic-bezier(0.18, 0.88, 0.22, 1) 120ms both;
+}
+
+.arcetis-landing-grid {
+  background-image:
+    linear-gradient(to right, rgba(128, 128, 128, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(128, 128, 128, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at top, rgba(255, 189, 89, 0.1), transparent 34%);
+  background-position: center;
+  background-size:
+    72px 72px,
+    72px 72px,
+    auto;
+  mask-image: radial-gradient(circle at center, black 44%, transparent 100%);
+}
+
+.arcetis-landing-orb {
+  animation: arcetis-landing-float 10s ease-in-out infinite;
+}
+
+.arcetis-landing-orb-delayed {
+  animation-delay: -4.8s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arcetis-levelup-backdrop,
+  .arcetis-levelup-panel,
+  .arcetis-levelup-scan,
+  .arcetis-landing-orb,
+  .arcetis-landing-orb-delayed {
+    animation: none;
+  }
+}
