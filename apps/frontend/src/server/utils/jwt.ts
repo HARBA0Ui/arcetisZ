@@ -17,6 +17,7 @@ export type TwoFactorChallengePayload = {
   email: string;
   role: "ADMIN";
   scope: "backoffice";
+  codeHash: string;
 };
 
 export type ArcetisTokenPayload = SessionTokenPayload | TwoFactorChallengePayload;
@@ -63,7 +64,7 @@ export function verifyTwoFactorChallengeToken(token: string): TwoFactorChallenge
   const payload = verifyToken(token);
 
   if (payload.type !== "two_factor") {
-    throw new Error("Invalid 2FA challenge token");
+    throw new Error("Invalid verification challenge token");
   }
 
   return payload;

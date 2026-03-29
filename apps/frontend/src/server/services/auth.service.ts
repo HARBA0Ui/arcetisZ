@@ -8,23 +8,20 @@ import {
   PASSWORD_RESET_TTL_MINUTES,
   hashAuthSecret
 } from "../utils/auth-secrets";
-import { decryptText, encryptText } from "../utils/crypto";
 import type { AuthScope } from "../utils/jwt";
 import { signSessionToken, signTwoFactorChallenge, verifyTwoFactorChallengeToken } from "../utils/jwt";
-import {
-  buildTwoFactorUri,
-  buildTwoFactorQrCode,
-  consumeRecoveryCode,
-  generateRecoveryCodes,
-  generateTwoFactorSetup,
-  verifyTwoFactorCode
-} from "../utils/two-factor";
 import { verifyStoredPassword } from "../utils/password";
 import { prisma } from "../utils/prisma";
-import { sendFrontofficeVerificationEmail, sendPasswordResetEmail } from "./authEmail.service";
+import {
+  sendBackofficeLoginCodeEmail,
+  sendFrontofficeVerificationEmail,
+  sendPasswordResetEmail
+} from "./authEmail.service";
 import { useReferralCode as applyReferralCode } from "./referral.service";
 import { processLoginStreak } from "./dailyLogin.service";
 import { sanitizeUser } from "./user.service";
+
+const BACKOFFICE_LOGIN_CODE_TTL_MINUTES = 10;
 
 function randomReferralCode(length = 8) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -116,12 +113,13 @@ function buildSessionToken(scope: AuthScope, user: { id: string; email: string; 
   });
 }
 
-function buildChallengeToken(user: { id: string; email: string }) {
+function buildChallengeToken(user: { id: string; email: string }, code: string) {
   return signTwoFactorChallenge({
     scope: "backoffice",
     userId: user.id,
     email: user.email,
-    role: "ADMIN"
+    role: "ADMIN",
+    codeHash: hashAuthSecret(code)
   });
 }
 
@@ -201,78 +199,25 @@ async function issuePasswordResetLink(user: { id: string; email: string }, appUr
   };
 }
 
-function readRecoveryCodes(raw: unknown) {
-  return Array.isArray(raw) ? raw.filter((value): value is string => typeof value === "string") : [];
-}
-
-function getTwoFactorSecret(user: { twoFactorSecret?: string | null }) {
-  if (!user.twoFactorSecret) {
-    throw new ApiError(400, "Two-factor setup is not ready");
-  }
-
-  return decryptText(user.twoFactorSecret);
-}
-
-async function verifyAdminTwoFactorCode(user: {
-  id: string;
-  role: "USER" | "ADMIN";
-  twoFactorEnabled: boolean;
-  twoFactorSecret?: string | null;
-  twoFactorRecoveryCodes?: unknown;
-}, code: string) {
-  if (user.role !== "ADMIN" || !user.twoFactorEnabled || !user.twoFactorSecret) {
-    throw new ApiError(400, "Two-factor authentication is not enabled");
-  }
-
-  const trimmedCode = code.trim().toUpperCase();
-  const secret = getTwoFactorSecret(user);
-
-  if (verifyTwoFactorCode(secret, trimmedCode)) {
-    return;
-  }
-
-  const nextCodes = consumeRecoveryCode(readRecoveryCodes(user.twoFactorRecoveryCodes), trimmedCode);
-  if (!nextCodes) {
-    throw new ApiError(401, "Invalid verification code");
-  }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      twoFactorRecoveryCodes: nextCodes
-    }
-  });
-}
-
-async function prepareBackofficeTwoFactorSetup(user: {
-  id: string;
-  email: string;
-  role: "USER" | "ADMIN";
-  twoFactorSecret?: string | null;
-}) {
+async function issueBackofficeLoginCode(user: { id: string; email: string; role: "USER" | "ADMIN" }, appUrl: string) {
   if (user.role !== "ADMIN") {
     throw new ApiError(403, "Admin access required");
   }
 
-  const secret = user.twoFactorSecret ? decryptText(user.twoFactorSecret) : generateTwoFactorSetup(user.email).secret;
-
-  if (!user.twoFactorSecret) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        twoFactorSecret: encryptText(secret),
-        twoFactorEnabled: false,
-        twoFactorRecoveryCodes: []
-      }
-    });
-  }
-
-  const otpauthUrl = buildTwoFactorUri(user.email, secret);
+  const code = createEmailVerificationCode();
+  const delivery = await sendBackofficeLoginCodeEmail({
+    email: user.email,
+    code,
+    loginUrl: buildAppUrl(appUrl, "/backoffice/login")
+  });
 
   return {
-    secret,
-    otpauthUrl,
-    qrCodeDataUrl: await buildTwoFactorQrCode(otpauthUrl)
+    requiresTwoFactor: true as const,
+    challengeToken: buildChallengeToken(user, code),
+    user: sanitizeUser(user),
+    delivery: delivery.delivery,
+    previewCode: delivery.delivery === "preview" ? code : undefined,
+    expiresInMinutes: BACKOFFICE_LOGIN_CODE_TTL_MINUTES
   };
 }
 
@@ -357,7 +302,12 @@ export async function registerUser(input: {
   return issueFrontofficeVerificationCode(freshUser, input.appUrl);
 }
 
-export async function loginUser(input: { email: string; password: string; scope: AuthScope }) {
+export async function loginUser(input: {
+  email: string;
+  password: string;
+  scope: AuthScope;
+  appUrl: string;
+}) {
   const email = input.email.toLowerCase().trim();
   const user = await prisma.user.findUnique({ where: { email } });
 
@@ -392,29 +342,8 @@ export async function loginUser(input: { email: string; password: string; scope:
     throw new ApiError(404, "User not found");
   }
 
-  if (input.scope === "backoffice" && !freshUser.twoFactorEnabled) {
-    return {
-      requiresTwoFactorSetup: true,
-      challengeToken: buildChallengeToken(freshUser),
-      user: sanitizeUser(freshUser),
-      setup: await prepareBackofficeTwoFactorSetup(freshUser)
-    } as const;
-  }
-
-  if (input.scope === "backoffice" && freshUser.twoFactorEnabled) {
-    return {
-      requiresTwoFactor: true,
-      challengeToken: buildChallengeToken(freshUser),
-      user: sanitizeUser(freshUser)
-    } as const;
-  }
-
   if (input.scope === "backoffice") {
-    return {
-      requiresTwoFactor: false,
-      sessionToken: buildSessionToken("backoffice", freshUser),
-      user: sanitizeUser(freshUser)
-    } as const;
+    return issueBackofficeLoginCode(freshUser, input.appUrl);
   }
 
   const streakResult = await processLoginStreak(user.id);
@@ -450,37 +379,28 @@ export async function verifyBackofficeTwoFactor(challengeToken: string, code: st
     throw new ApiError(403, "Admin access required");
   }
 
-  if (!user.twoFactorEnabled) {
-    const trimmedCode = code.trim().replace(/\s+/g, "");
-    const secret = getTwoFactorSecret(user);
-
-    if (!verifyTwoFactorCode(secret, trimmedCode)) {
-      throw new ApiError(401, "Invalid verification code");
-    }
-
-    const recoveryCodes = generateRecoveryCodes();
-    const updatedUser = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        twoFactorEnabled: true,
-        twoFactorRecoveryCodes: recoveryCodes.hashedCodes
-      }
-    });
-
-    return {
-      sessionToken: buildSessionToken("backoffice", updatedUser),
-      user: sanitizeUser(updatedUser),
-      recoveryCodes: recoveryCodes.plainCodes
-    };
+  const normalizedCode = code.trim().replace(/\s+/g, "");
+  if (hashAuthSecret(normalizedCode) !== challenge.codeHash) {
+    throw new ApiError(401, "Invalid verification code");
   }
-
-  await verifyAdminTwoFactorCode(user, code);
 
   return {
     sessionToken: buildSessionToken("backoffice", user),
-    user: sanitizeUser(user),
-    recoveryCodes: [] as string[]
+    user: sanitizeUser(user)
   };
+}
+
+export async function resendBackofficeLoginCode(challengeToken: string, appUrl: string) {
+  const challenge = verifyTwoFactorChallengeToken(challengeToken);
+  const user = await prisma.user.findUnique({
+    where: { id: challenge.userId }
+  });
+
+  if (!user || user.role !== "ADMIN") {
+    throw new ApiError(403, "Admin access required");
+  }
+
+  return issueBackofficeLoginCode(user, appUrl);
 }
 
 export async function getMe(userId: string) {
@@ -673,91 +593,3 @@ export async function loginWithGoogleUser(input: {
   };
 }
 
-export async function getBackofficeTwoFactorStatus(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      role: true,
-      twoFactorEnabled: true,
-      twoFactorRecoveryCodes: true
-    }
-  });
-
-  if (!user || user.role !== "ADMIN") {
-    throw new ApiError(403, "Admin access required");
-  }
-
-  return {
-    enabled: user.twoFactorEnabled,
-    recoveryCodesRemaining: readRecoveryCodes(user.twoFactorRecoveryCodes).length
-  };
-}
-
-export async function beginBackofficeTwoFactorSetup(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      role: true
-    }
-  });
-
-  if (!user || user.role !== "ADMIN") {
-    throw new ApiError(403, "Admin access required");
-  }
-
-  return prepareBackofficeTwoFactorSetup(user);
-}
-
-export async function enableBackofficeTwoFactor(userId: string, code: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId }
-  });
-
-  if (!user || user.role !== "ADMIN") {
-    throw new ApiError(403, "Admin access required");
-  }
-
-  const secret = getTwoFactorSecret(user);
-  if (!verifyTwoFactorCode(secret, code)) {
-    throw new ApiError(400, "Invalid verification code");
-  }
-
-  const recoveryCodes = generateRecoveryCodes();
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      twoFactorEnabled: true,
-      twoFactorRecoveryCodes: recoveryCodes.hashedCodes
-    }
-  });
-
-  return {
-    recoveryCodes: recoveryCodes.plainCodes
-  };
-}
-
-export async function disableBackofficeTwoFactor(userId: string, code: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId }
-  });
-
-  if (!user || user.role !== "ADMIN") {
-    throw new ApiError(403, "Admin access required");
-  }
-
-  await verifyAdminTwoFactorCode(user, code);
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      twoFactorEnabled: false,
-      twoFactorSecret: null,
-      twoFactorRecoveryCodes: []
-    }
-  });
-
-  return { disabled: true };
-}

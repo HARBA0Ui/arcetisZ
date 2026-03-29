@@ -187,7 +187,7 @@ export function getTwoFactorErrorMessage(error: unknown) {
     return "The verification code is incorrect.";
   }
 
-  if (message === "2FA challenge has expired") {
+  if (message === "Verification code session has expired") {
     return "Your sign-in session expired. Sign in again to get a new code.";
   }
 

@@ -33,13 +33,10 @@ import {
   getMe,
   loginUser,
   registerUser,
+  resendBackofficeLoginCode,
   requestFrontofficePasswordReset,
   resendFrontofficeVerificationEmail,
   resetFrontofficePassword,
-  beginBackofficeTwoFactorSetup as beginTwoFactorSetup,
-  disableBackofficeTwoFactor as disableTwoFactor,
-  enableBackofficeTwoFactor as enableTwoFactor,
-  getBackofficeTwoFactorStatus as getTwoFactorStatus,
   verifyBackofficeTwoFactor as verifyTwoFactor,
   verifyFrontofficeEmail
 } from "@/server/services/auth.service";
@@ -221,12 +218,6 @@ async function handleGet(request: NextRequest, path: string[]) {
     const auth = requireAuth(request);
     const user = await getMe(auth.userId);
     return NextResponse.json({ user });
-  }
-
-  if (isAppSessionRoute(path) && path[1] === "2fa" && path[2] === "status" && path.length === 3) {
-    const auth = await requireAdmin(request);
-    const status = await getTwoFactorStatus(auth.userId);
-    return NextResponse.json(status);
   }
 
   if (path[0] === "user" && path[1] === "profile" && path.length === 2) {
@@ -647,7 +638,8 @@ async function handlePost(request: NextRequest, path: string[]) {
     try {
       const result = await loginUser({
         ...payload,
-        scope
+        scope,
+        appUrl: getRequestOrigin(request)
       });
 
       for (const key of throttleKeys) {
@@ -665,24 +657,23 @@ async function handlePost(request: NextRequest, path: string[]) {
         return response;
       }
 
-      if (result.requiresTwoFactorSetup) {
-        const response = NextResponse.json({
-          requiresTwoFactorSetup: true,
-          user: result.user,
-          setup: result.setup
-        });
-
-        setTwoFactorChallengeCookie(response, request, result.challengeToken);
-        clearSessionCookie(response, request, "backoffice");
-        return response;
-      }
-
       const response = NextResponse.json({
         user: result.user,
-        loginBonus: result.loginBonus
+        loginBonus: result.loginBonus,
+        requiresTwoFactor: result.requiresTwoFactor,
+        delivery: "delivery" in result ? result.delivery : undefined,
+        previewCode: "previewCode" in result ? result.previewCode : undefined,
+        expiresInMinutes: "expiresInMinutes" in result ? result.expiresInMinutes : undefined
       });
-      setSessionCookie(response, request, scope, result.sessionToken);
-      clearTwoFactorChallengeCookie(response, request);
+
+      if ("requiresTwoFactor" in result && result.requiresTwoFactor && "challengeToken" in result) {
+        setTwoFactorChallengeCookie(response, request, result.challengeToken);
+        clearSessionCookie(response, request, "backoffice");
+      } else if ("sessionToken" in result) {
+        setSessionCookie(response, request, scope, result.sessionToken);
+        clearTwoFactorChallengeCookie(response, request);
+      }
+
       return response;
     } catch (error) {
       for (const key of throttleKeys) {
@@ -707,26 +698,6 @@ async function handlePost(request: NextRequest, path: string[]) {
     return response;
   }
 
-  if (isAppSessionRoute(path) && path[1] === "2fa" && path[2] === "setup" && path.length === 3) {
-    const auth = await requireAdmin(request);
-    const setup = await beginTwoFactorSetup(auth.userId);
-    return NextResponse.json(setup);
-  }
-
-  if (isAppSessionRoute(path) && path[1] === "2fa" && path[2] === "enable" && path.length === 3) {
-    const auth = await requireAdmin(request);
-    const payload = await parseJsonBody(request, twoFactorCodeSchema);
-    const result = await enableTwoFactor(auth.userId, payload.code);
-    return NextResponse.json(result);
-  }
-
-  if (isAppSessionRoute(path) && path[1] === "2fa" && path[2] === "disable" && path.length === 3) {
-    const auth = await requireAdmin(request);
-    const payload = await parseJsonBody(request, twoFactorCodeSchema);
-    const result = await disableTwoFactor(auth.userId, payload.code);
-    return NextResponse.json(result);
-  }
-
   if (isAppSessionRoute(path) && path[1] === "2fa" && path[2] === "verify" && path.length === 3) {
     const payload = await parseJsonBody(request, twoFactorCodeSchema);
     const challengeToken = getTwoFactorChallengeTokenFromCookie(request);
@@ -734,7 +705,7 @@ async function handlePost(request: NextRequest, path: string[]) {
     const throttleKey = `auth:2fa:ip:${ip}`;
 
     if (!challengeToken) {
-      throw new ApiError(401, "2FA challenge has expired");
+      throw new ApiError(401, "Verification code session has expired");
     }
 
     await assertThrottle(throttleKey, {
@@ -745,13 +716,47 @@ async function handlePost(request: NextRequest, path: string[]) {
 
     try {
       const result = await verifyTwoFactor(challengeToken, payload.code);
-      const response = NextResponse.json({
-        user: result.user,
-        recoveryCodes: result.recoveryCodes
-      });
+      const response = NextResponse.json({ user: result.user });
 
       setSessionCookie(response, request, "backoffice", result.sessionToken);
       clearTwoFactorChallengeCookie(response, request);
+      await clearThrottle(throttleKey);
+      return response;
+    } catch (error) {
+      await registerFailedAttempt(throttleKey, {
+        maxAttempts: 5,
+        windowMinutes: 10,
+        blockMinutes: 15
+      });
+      throw error;
+    }
+  }
+
+  if (isAppSessionRoute(path) && path[1] === "2fa" && path[2] === "resend" && path.length === 3) {
+    const challengeToken = getTwoFactorChallengeTokenFromCookie(request);
+    const ip = getRequestClientIp(request);
+    const throttleKey = `auth:2fa:resend:ip:${ip}`;
+
+    if (!challengeToken) {
+      throw new ApiError(401, "Verification code session has expired");
+    }
+
+    await assertThrottle(throttleKey, {
+      maxAttempts: 5,
+      windowMinutes: 10,
+      blockMinutes: 15
+    });
+
+    try {
+      const result = await resendBackofficeLoginCode(challengeToken, getRequestOrigin(request));
+      const response = NextResponse.json({
+        ok: true,
+        delivery: result.delivery,
+        previewCode: result.previewCode,
+        expiresInMinutes: result.expiresInMinutes
+      });
+
+      setTwoFactorChallengeCookie(response, request, result.challengeToken);
       await clearThrottle(throttleKey);
       return response;
     } catch (error) {

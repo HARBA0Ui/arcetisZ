@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/backoffice/lib/api";
 import { clearToken, setToken } from "@/backoffice/lib/auth";
 import { useBackofficeAuthToken } from "@/backoffice/hooks/use-auth-token";
-import type { TwoFactorSetup, TwoFactorStatus, User } from "@/lib/types";
+import type { User } from "@/lib/types";
 
 type AuthResponse = {
   user: User;
   requiresTwoFactor?: boolean;
-  requiresTwoFactorSetup?: boolean;
-  setup?: TwoFactorSetup;
+  delivery?: "smtp" | "preview";
+  previewCode?: string;
+  expiresInMinutes?: number;
 };
 
 const adminMeQueryKey = ["backoffice-me"] as const;
@@ -54,7 +55,7 @@ export function useLogin() {
       return response.data;
     },
     onSuccess: (data) => {
-      if (data.requiresTwoFactor || data.requiresTwoFactorSetup) {
+      if (data.requiresTwoFactor) {
         clearToken();
         queryClient.removeQueries({ queryKey: adminMeQueryKey });
         return;
@@ -81,7 +82,7 @@ export function useVerifyTwoFactor() {
 
   return useMutation({
     mutationFn: async (payload: { code: string }) => {
-      const response = await api.post<{ user: User; recoveryCodes?: string[] }>("/session/2fa/verify", payload);
+      const response = await api.post<{ user: User }>("/session/2fa/verify", payload);
       return response.data;
     },
     onSuccess: (data) => {
@@ -91,53 +92,16 @@ export function useVerifyTwoFactor() {
   });
 }
 
-export function useTwoFactorStatus() {
-  const token = useBackofficeAuthToken();
-
-  return useQuery({
-    queryKey: ["backoffice-2fa-status"],
-    queryFn: async () => {
-      const response = await api.get<TwoFactorStatus>("/session/2fa/status");
-      return response.data;
-    },
-    enabled: !!token,
-    staleTime: 30 * 1000
-  });
-}
-
-export function useBeginTwoFactorSetup() {
+export function useResendLoginCode() {
   return useMutation({
     mutationFn: async () => {
-      const response = await api.post<TwoFactorSetup>("/session/2fa/setup");
+      const response = await api.post<{
+        ok: true;
+        delivery: "smtp" | "preview";
+        previewCode?: string;
+        expiresInMinutes?: number;
+      }>("/session/2fa/resend");
       return response.data;
-    }
-  });
-}
-
-export function useEnableTwoFactor() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (payload: { code: string }) => {
-      const response = await api.post<{ recoveryCodes: string[] }>("/session/2fa/enable", payload);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["backoffice-2fa-status"] });
-    }
-  });
-}
-
-export function useDisableTwoFactor() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (payload: { code: string }) => {
-      const response = await api.post<{ disabled: boolean }>("/session/2fa/disable", payload);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["backoffice-2fa-status"] });
     }
   });
 }

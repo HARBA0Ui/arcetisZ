@@ -245,17 +245,6 @@ export type PlatformConfig = {
   spinItems?: SpinItem[];
 };
 
-export type TwoFactorStatus = {
-  enabled: boolean;
-  recoveryCodesRemaining: number;
-};
-
-export type TwoFactorSetup = {
-  secret: string;
-  otpauthUrl: string;
-  qrCodeDataUrl: string;
-};
-
 export type PaginatedResult<T> = {
   items: T[];
   page: number;
